@@ -92,18 +92,3 @@ def compute_acc(clf, params):
     preds = [clf(x1, x2, vectorized=False, **params) for (x1, x2) in test_pairs]
     acc = sklearn.metrics.accuracy_score(preds, y_test)
     return acc
-
-def plot_2_face_vecs(face1, face2, figsize=(8, 10), normalized=False):
-    '''plots two face vectors'''
-
-    if normalized:
-        face1, face2 = normalizer.inverse_transform([face1, face2])
-
-    face1 = face1.reshape(h,w)
-    face2 = face2.reshape(h,w)
-
-
-    fig, (ax1, ax2) = plt.subplots(figsize=figsize, ncols=2)
-    ax1.imshow(face1, cmap='gray')
-    ax2.imshow(face2, cmap='gray')
-    return fig, (ax1,ax2)
