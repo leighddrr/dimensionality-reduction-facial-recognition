@@ -3,9 +3,9 @@ import torch
 from torch import nn
 from sklearn.decomposition import PCA
 
-class Fisherface(nn.Module):
+class Fisherface():
+    '''An implementation of fisherface'''
     def __init__(self, X, y, n_components=None, pca_first=True, verbose=True):
-        super(Fisherface, self).__init__()
 
         self.n_samples = np.shape(X)[0]
         self.dim = np.shape(X)[1]
@@ -32,7 +32,8 @@ class Fisherface(nn.Module):
                 print('Done.')
 
             # the fisher's linear discriminant matrix
-            W_fld = torch.Tensor(self.n_samples - self.n_classes, self.n_components) # (n_samples - n_classes x n_compoenents) matrix
+            # TODO: consider what the best choice for intialization would be. currently deterministically identity.
+            W_fld = torch.eye(self.n_samples - self.n_classes, self.n_components) # (n_samples - n_classes x n_compoenents) matrix
             self.W_fld = nn.Parameter(W_fld)
 
         else:
@@ -55,12 +56,18 @@ class Fisherface(nn.Module):
             print('Computing the between-class and within-class scatter matrices...')
         self.S_B = np.sum([n_points_by_class[class_] * (class_means[class_] - global_mean).T @ (class_means[class_] - global_mean) for class_ in classes], axis=0)
         self.S_W = np.sum([(points_by_class[class_] - class_means[class_]).T @ (points_by_class[class_] - class_means[class_]) for class_ in classes], axis=0)
+
+        self.S_B = torch.tensor(self.S_B, dtype=torch.float32)
+        self.S_W = torch.tensor(self.S_W, dtype=torch.float32)
         if verbose:
             print('Done.')
 
 
     def loss(self):
-        pass
+        numerator = torch.det(self.W_fld.t() @ self.W_pca.t() @ self.S_B @ self.W_pca @ self.W_fld)
+        denominator = torch.det(self.W_fld.t() @ self.W_pca.t() @ self.S_W @ self.W_pca @ self.W_fld)
+        loss = numerator / denominator
+        return loss
 
     @property
     def W_opt(self):
