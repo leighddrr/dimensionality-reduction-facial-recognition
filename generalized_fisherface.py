@@ -3,6 +3,57 @@ import torch
 from torch import nn
 from sklearn.decomposition import PCA
 
+class myPCA():
+    '''An implementation of PCA using gradient decent'''
+    # used for debugging implementation of generalized fisherface...
+    def __init__(self, X, n_components, optimizer=torch.optim.Adam, lr=1e-2, n_steps=100, l2_coef=1, verbose=True, **optim_kwargs):
+
+        self.n_samples = np.shape(X)[0]
+        self.dim = np.shape(X)[1]
+        self.n_components = n_components
+
+        self.l2_coef = l2_coef
+
+        W = torch.eye(self.dim, self.n_components) # (dim x n_compoenents) matrix
+        self.W = nn.Parameter(W)
+
+        # NOTE: we assume normalization prior to calling this...
+        global_mean = np.mean(X, axis=0)
+
+        # compute total scatter matrix
+        self.S_T = (X - global_mean).T @ (X - global_mean)
+        # self.S_T = np.cov(X.T)# NOTE TEMP
+        self.S_T = torch.tensor(self.S_T, dtype=torch.float32)
+
+        self.optimizer = optimizer([self.W], lr=lr, **optim_kwargs)
+        self.n_steps = n_steps
+        self.loss_history = []
+
+    def loss(self):
+        # (negative since we're maximizing) + L2 regularization to implement constrained optimization (NOTE TEMP experimentating)
+        loss = - torch.det(self.W.t() @ self.S_T @ self.W) + self.l2_coef * torch.linalg.matrix_norm(self.W, ord=2)
+        return loss
+
+    @property
+    def W_opt(self):
+        '''returns normalized transformation matrix'''
+        return self.W / torch.sqrt(torch.sum(self.W**2, axis=0))
+
+    def fit(self, X=None, y=None, n_steps=None):
+        if n_steps is None:
+            n_steps = self.n_steps
+
+        print('Fitting transformation...')
+        for _ in tqdm(range(n_steps)):
+            self.optimizer.zero_grad()
+            loss = self.loss()
+            loss.backward()
+            self.optimizer.step()
+            self.loss_history.append(loss.detach().numpy())
+
+    def transform(self, X):
+        return self.W_opt.t() @ X
+
 class Fisherface():
     '''An implementation of fisherface'''
     def __init__(self, X, y, n_components=None, pca_first=True, verbose=True):
