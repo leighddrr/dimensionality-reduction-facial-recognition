@@ -6,13 +6,17 @@ from sklearn.decomposition import PCA
 class myPCA():
     '''An implementation of PCA using gradient decent'''
     # used for debugging implementation of generalized fisherface...
-    def __init__(self, X, n_components, optimizer=torch.optim.Adam, lr=1e-2, n_steps=100, l2_coef=1, verbose=True, **optim_kwargs):
+    def __init__(self, X, n_components, optimizer=torch.optim.Adam, regularization_func=torch.linalg.matrix_norm,
+                    lr=1e-2, n_steps=100, l2_coef=1, stop_thres=1e-3, verbose=True, **optim_kwargs):
 
         self.n_samples = np.shape(X)[0]
         self.dim = np.shape(X)[1]
         self.n_components = n_components
 
         self.l2_coef = l2_coef
+        self.regularization_func = regularization_func
+
+        self.stop_thres = stop_thres
 
         W = torch.eye(self.dim, self.n_components) # (dim x n_compoenents) matrix
         self.W = nn.Parameter(W)
@@ -28,22 +32,30 @@ class myPCA():
         self.optimizer = optimizer([self.W], lr=lr, **optim_kwargs)
         self.n_steps = n_steps
         self.loss_history = []
+        self.objective_history = []
+
+    def base_objective_func(self, W):
+        return torch.det(W.t() @ self.S_T @ W)
 
     def loss(self):
         # (negative since we're maximizing) + L2 regularization to implement constrained optimization (NOTE TEMP experimentating)
-        loss = - torch.det(self.W.t() @ self.S_T @ self.W) + self.l2_coef * torch.linalg.matrix_norm(self.W, ord=2)
+        loss = - self.base_objective_func(self.W) + self.l2_coef * self.regularization_func(self.W)
         return loss
+
+    def normalized_W(self):
+        return self.W / torch.sqrt(torch.sum(self.W**2, axis=0))
 
     @property
     def W_opt(self):
         '''returns normalized transformation matrix'''
-        return self.W / torch.sqrt(torch.sum(self.W**2, axis=0))
+        return self.normalized_W()
 
     def fit(self, X=None, y=None, n_steps=None):
         if n_steps is None:
             n_steps = self.n_steps
 
         print('Fitting transformation...')
+        obj_prev = self.base_objective_func(self.W_opt).detach().numpy()
         for _ in tqdm(range(n_steps)):
             self.optimizer.zero_grad()
             loss = self.loss()
@@ -51,8 +63,20 @@ class myPCA():
             self.optimizer.step()
             self.loss_history.append(loss.detach().numpy())
 
+            objective = self.base_objective_func(self.W_opt).detach().numpy()
+            self.objective_history.append(objective)
+
+            if self.stop_thres is not None:
+                if np.max(np.abs(obj_prev - objective)) < self.stop_thres:
+                    print('Early stopping.')
+                    break
+
+                obj_prev = self.base_objective_func(self.W_opt).detach().numpy()
+
+
     def transform(self, X):
         return self.W_opt.t() @ X
+
 
 class Fisherface():
     '''An implementation of fisherface'''
