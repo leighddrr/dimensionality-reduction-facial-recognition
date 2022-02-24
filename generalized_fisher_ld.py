@@ -10,6 +10,7 @@ from sklearn.preprocessing import StandardScaler
 
 from sklearn.discriminant_analysis import _cov, _class_cov, _class_means
 
+# TODO: try to adjust implementation so that it interpolates between fisherface and eigenface
 class GeneralizedFisherLD(BaseEstimator):
     def __init__(self, n_components=None, alpha=0, shrinkage=None, priors=None):
         """Initialize Fisher's Linear Discriminant.
@@ -18,8 +19,6 @@ class GeneralizedFisherLD(BaseEstimator):
             n_components (int, optional): number of components of projection.
                 maximum possible used if not provided. Defaults to None.
             alpha (float, optional): alpha parameter in range [0,1].
-                interpolates between fisher's Linear Discriminant and PCA.
-                0 corresponds to standard fisher's LD, 1 corresponds to PCA.
             shrinkage (str, float, None): shrinkage for the covariance estimator.
                 'auto': (automatic shrinkage using Ledoit-Wolf lemma)
                 float: fixed shrinkage constant between 0 and 1 and
