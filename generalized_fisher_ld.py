@@ -107,6 +107,7 @@ class GeneralizedFisherLD(BaseEstimator):
         max_components = min(n_classes - 1, dim)
 
         # TODO FIXME: is this only relevant for alpha=0? if so only check in this case
+        # NOTE: maybe larger number of components is possible with alpha > 0. if so, this could meaningfully improve performance!
         # if `n_components` is not specified, use largest possible
         if self.n_components is None:
             self._max_components = max_components
