@@ -10,13 +10,30 @@ from sklearn.preprocessing import StandardScaler
 
 from sklearn.discriminant_analysis import _cov, _class_cov, _class_means
 
-class FisherLD(BaseEstimator):
-    def __init__(self, n_components=None, shrinkage=None, priors=None):
+# GENERALIZED FISHERLD (ORIGINAL)
+
+# import warnings
+import numpy as np
+from scipy import linalg
+
+from sklearn.base import BaseEstimator, TransformerMixin, ClassifierMixin
+from sklearn.covariance import ledoit_wolf, empirical_covariance, shrunk_covariance
+from sklearn.utils.multiclass import unique_labels
+from sklearn.utils.validation import check_is_fitted
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.discriminant_analysis import _cov, _class_cov, _class_means
+
+class GeneralizedFisherLD(BaseEstimator):
+    def __init__(self, n_components=None, alpha=0, shrinkage=None, priors=None):
         """Initialize Fisher's Linear Discriminant.
 
         Args:
             n_components (int, optional): number of components of projection.
                 maximum possible used if not provided. Defaults to None.
+            alpha (float, optional): alpha parameter in range [0,1].
+                interpolates between fisher's Linear Discriminant and PCA.
+                0 corresponds to standard fisher's LD, 1 corresponds to PCA.
             shrinkage (str, float, None): shrinkage for the covariance estimator.
                 'auto': (automatic shrinkage using Ledoit-Wolf lemma)
                 float: fixed shrinkage constant between 0 and 1 and
@@ -25,9 +42,10 @@ class FisherLD(BaseEstimator):
                 calculated automatically if not provided. Defaults to None.
         """
 
+        self.n_components = n_components
+        self.alpha = alpha
         self.shrinkage = shrinkage
         self.priors = priors
-        self.n_components = n_components
 
     def _solve_eigen(self, X, y, shrinkage):
         """
@@ -46,30 +64,30 @@ class FisherLD(BaseEstimator):
         """
 
         self.class_means_ = _class_means(X, y)
-        self.class_cov_ = _class_cov(
-            X, y, self.priors_, shrinkage, covariance_estimator=None
-        )
+        self.class_cov_ = _class_cov(X, y, self.priors_, shrinkage, covariance_estimator=None)
 
-
-        # TODO: can we implement this in such a way that the generalization *interpolates* between eigenface and fisherface!?
         S_w = self.class_cov_  # within-class scatter matrix
         S_t = _cov(X, shrinkage, covariance_estimator=None)  # total scatter matrix
         S_b = S_t - S_w  # between-class scatter matrix
 
+        # calculate the A_matrix and B_matrix
+        A_matrix = S_b # TODO: add beta parameter to interpolate S_b??
+        B_matrix = self.alpha * np.identity(np.shape(S_w)[0]) + (1 - self.alpha)*S_w
+
+        # store A_matrix and B_matrix for debugging (maybe remove later? FIXME)
+        self.A_matrix_ = A_matrix
+        self.B_matrix_ = B_matrix
+
         # solve generalized eigenvector problem
-        eigen_vals, eigen_vecs = linalg.eigh(S_b, S_w) # S_b v_i = lambda_i S_w v_i
+        eigen_vals, eigen_vecs = linalg.eigh(A_matrix, B_matrix) # A v_i = lambda_i B v_i
 
-        # sort eigenvalues and eigenvectors
-        eigen_vals = np.sort(eigen_vals)[::-1]
-        eigen_vecs = eigen_vecs[:, np.argsort(eigen_vals)[::-1]]
 
-        self.eigen_vals_ = eigen_vals
-        self.eigen_vecs_ = eigen_vecs
+        sorted_idx = np.argsort(eigen_vals)[::-1]
+        eigen_vecs = eigen_vecs[:, sorted_idx]  # sort eigenvectors
+        eigen_vals = eigen_vals[sorted_idx] # sort eigenvalues
 
-        # calculate the explained varaince ratio
-        self.explained_variance_ratio = eigen_vals[:self._max_components] / np.sum(eigen_vals)
+        self.explained_variance_ratio_ = eigen_vals[:self._max_components] / np.sum(eigen_vals)
 
-        # define transformation matrix
         self.transformation_matrix_ = eigen_vecs
 
 
@@ -100,8 +118,9 @@ class FisherLD(BaseEstimator):
 
 
         # the maximum number of components possible
-        max_components = min(len(self.classes_) - 1, dim)
+        max_components = min(n_classes - 1, dim)
 
+        # TODO FIXME: is this only relevant for alpha=0? if so only check in this case
         # if `n_components` is not specified, use largest possible
         if self.n_components is None:
             self._max_components = max_components
@@ -114,8 +133,7 @@ class FisherLD(BaseEstimator):
                 )
             self._max_components = self.n_components
 
-        # solve generalized eigenvector problem
-        self._solve_eigen( X, y, shrinkage=self.shrinkage)
+        self._solve_eigen(X, y, shrinkage=self.shrinkage)
 
         return self
 
@@ -130,8 +148,9 @@ class FisherLD(BaseEstimator):
             np.ndarray: transformed data.
         """
 
-        check_is_fitted(self) # only keep going model has already been fit
+        check_is_fitted(self)
 
-        X_new = np.dot(X, self.transformation_matrix_)
+        # TODO maybe transpose matrix s.t. -> W X?
+        X_transformed = np.dot(X, self.transformation_matrix_)
 
-        return X_new[:, : self._max_components]
+        return X_transformed[:, : self._max_components]
