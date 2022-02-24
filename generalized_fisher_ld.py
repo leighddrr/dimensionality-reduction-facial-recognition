@@ -1,21 +1,7 @@
-# import warnings
 import numpy as np
 from scipy import linalg
 
-from sklearn.base import BaseEstimator, TransformerMixin, ClassifierMixin
-from sklearn.covariance import ledoit_wolf, empirical_covariance, shrunk_covariance
-from sklearn.utils.multiclass import unique_labels
-from sklearn.utils.validation import check_is_fitted
-from sklearn.preprocessing import StandardScaler
-
-from sklearn.discriminant_analysis import _cov, _class_cov, _class_means
-
-# GENERALIZED FISHERLD (ORIGINAL)
-
-# import warnings
-import numpy as np
-from scipy import linalg
-
+# TODO: remove unnecessary imports
 from sklearn.base import BaseEstimator, TransformerMixin, ClassifierMixin
 from sklearn.covariance import ledoit_wolf, empirical_covariance, shrunk_covariance
 from sklearn.utils.multiclass import unique_labels
