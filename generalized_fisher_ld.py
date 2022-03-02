@@ -10,15 +10,15 @@ from sklearn.preprocessing import StandardScaler
 
 from sklearn.discriminant_analysis import _cov, _class_cov, _class_means
 
-# TODO: try to adjust implementation so that it interpolates between fisherface and eigenface
 class GeneralizedFisherLD(BaseEstimator):
-    def __init__(self, n_components=None, alpha=0, shrinkage=None, priors=None):
+    def __init__(self, n_components=None, alpha=0, beta=0, shrinkage=None, priors=None):
         """Initialize Fisher's Linear Discriminant.
 
         Args:
             n_components (int, optional): number of components of projection.
                 maximum possible used if not provided. Defaults to None.
-            alpha (float, optional): alpha parameter in range [0,1].
+            alpha (float, optional): alpha parameter in range [0,1]. Defaults to 0.
+            beta (float, optional): beta parameter in range [0,1]. Defaults to 0.
             shrinkage (str, float, None): shrinkage for the covariance estimator.
                 'auto': (automatic shrinkage using Ledoit-Wolf lemma)
                 float: fixed shrinkage constant between 0 and 1 and
@@ -29,6 +29,7 @@ class GeneralizedFisherLD(BaseEstimator):
 
         self.n_components = n_components
         self.alpha = alpha
+        self.beta = beta
         self.shrinkage = shrinkage
         self.priors = priors
 
@@ -44,7 +45,7 @@ class GeneralizedFisherLD(BaseEstimator):
             y (List[int]): training labels of shape (n_samples,)
             shrinkage (str, float, None): shrinkage for the covariance estimator.
                 'auto': (automatic shrinkage using Ledoit-Wolf lemma)
-                float: fixed shrinkage constant between 0 and 1 and
+                float: fixed shrinkage constant between 0 and 1
                 None: no shrinkage
         """
 
@@ -56,12 +57,18 @@ class GeneralizedFisherLD(BaseEstimator):
         S_b = S_t - S_w  # between-class scatter matrix
 
         # calculate the A_matrix and B_matrix
-        A_matrix = S_b # TODO: add beta parameter to interpolate S_b??
+        A_matrix = S_t - (1 - self.beta)*S_w
         B_matrix = self.alpha * np.identity(np.shape(S_w)[0]) + (1 - self.alpha)*S_w
 
-        # store A_matrix and B_matrix for debugging (maybe remove later? FIXME)
+        # store scatter matrices
+        self.S_w = S_w
+        self.S_t = S_t
+        self.S_b = S_b
+
+        # store A_matrix and B_matrix
         self.A_matrix_ = A_matrix
         self.B_matrix_ = B_matrix
+
 
         # solve generalized eigenvector problem
         eigen_vals, eigen_vecs = linalg.eigh(A_matrix, B_matrix) # A v_i = lambda_i B v_i
@@ -75,9 +82,6 @@ class GeneralizedFisherLD(BaseEstimator):
 
         self.transformation_matrix_ = eigen_vecs
 
-
-    # NOTE: SVD solver seems to be much less prone to overfitting and doesn't require pca-first.
-    # TODO figure out why. perhaps implement (though it doesn't use within-class between-class scatter.)
 
     def fit(self, X, y):
         """
@@ -113,10 +117,12 @@ class GeneralizedFisherLD(BaseEstimator):
 
         # if `n_components` is specified, check that it's valid
         else:
-            if self.n_components > max_components:
-                raise ValueError(
-                    "n_components cannot be larger than min(n_features, n_classes - 1)."
-                )
+            # # FIXME: add proper checks for valid number of components
+            # if self.alpha == 0:
+            #     if self.n_components > max_components:
+            #         raise ValueError(
+            #             "n_components cannot be larger than min(n_features, n_classes - 1)."
+            #         )
             self._max_components = self.n_components
 
         self._solve_eigen(X, y, shrinkage=self.shrinkage)
@@ -136,7 +142,42 @@ class GeneralizedFisherLD(BaseEstimator):
 
         check_is_fitted(self)
 
-        # TODO maybe transpose matrix s.t. -> W X?
         X_transformed = np.dot(X, self.transformation_matrix_)
 
         return X_transformed[:, : self._max_components]
+
+    def within_class_scatter(self):
+        """
+        compute and return the within-class scatter
+
+        Returns:
+            float: within-class scatter
+        """
+
+        check_is_fitted(self)
+
+        return np.linalg.det(self.transformation_matrix_.T @ self.S_b @ self.transformation_matrix_)
+
+    def between_class_scatter(self):
+        """
+        compute and return the between-class scatter.
+
+        Returns:
+            float: between-class scatter.
+        """
+
+        check_is_fitted(self)
+
+        return np.linalg.det(self.transformation_matrix_.T @ self.S_w @ self.transformation_matrix_)
+
+    def class_scatter_ratio(self):
+        """
+        compute and return the ration of between-class scatter to within-class scatter.
+
+        Returns:
+            float: class scatter ratio
+        """
+
+        check_is_fitted(self)
+
+        return self.between_class_scatter() / self.within_class_scatter()
