@@ -1,16 +1,13 @@
 import numpy as np
 from scipy import linalg
 
-# TODO: remove unnecessary imports
-from sklearn.base import BaseEstimator, TransformerMixin, ClassifierMixin
-from sklearn.covariance import ledoit_wolf, empirical_covariance, shrunk_covariance
+from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.utils.multiclass import unique_labels
 from sklearn.utils.validation import check_is_fitted
-from sklearn.preprocessing import StandardScaler
 
 from sklearn.discriminant_analysis import _cov, _class_cov, _class_means
 
-class GeneralizedFisherLD(BaseEstimator):
+class GeneralizedFisherLD(BaseEstimator, TransformerMixin):
     def __init__(self, n_components=None, alpha=0, beta=0, shrinkage=None, priors=None):
         """Initialize Fisher's Linear Discriminant.
 
@@ -92,7 +89,7 @@ class GeneralizedFisherLD(BaseEstimator):
             y (List[int]): training labels of shape (n_samples,)
 
         Returns:
-            self: Fitted estimator
+            self: Fitted transformer.
         """
 
         self.classes_ = unique_labels(y)
